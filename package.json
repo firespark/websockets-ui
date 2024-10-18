@@ -2,18 +2,22 @@
     "name": "ws_task",
     "version": "1.0.0",
     "description": "Template for the WebSocket remote control task",
-    "main": "index.js",
+    "main": "index.ts",
     "type": "module",
     "scripts": {
-        "start": "node ./index.js",
-        "start:dev": "nodemon ./index.js",
+        "start": "npx tsx ./index.ts",
+        "start:dev": "npx tsx watch index.ts",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "author": "Andrei Auchynnikau",
     "keywords": [],
     "license": "ISC",
     "devDependencies": {
-        "nodemon": "^2.0.16"
+        "@types/node": "^20.11.19",
+        "@types/ws": "^8.5.10",
+        "nodemon": "^2.0.16",
+        "tsx": "^4.7.1",
+        "typescript": "^5.3.3"
     },
     "dependencies": {
         "ws": "^8.8.0"
