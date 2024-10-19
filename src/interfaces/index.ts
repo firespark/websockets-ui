@@ -10,7 +10,7 @@ export interface reqOutputInt {
     id: number,
 }
 
-export class reponse implements reqOutputInt {
+export class Reponse implements reqOutputInt {
     type: string;
     data: string;
     id: number;
@@ -21,16 +21,16 @@ export class reponse implements reqOutputInt {
     }
 }
 
-export class regOutputData{   
+export class RegOutputData{   
     name: string;
     index: number | string;
     error: boolean;
     errorText: string;
     constructor(name: string, index: number, errorText?:string){
-            this.name,
-            this.index,
-            this.error = errorText ? true : false,
-            this.errorText
+            this.name = name;
+            this.index = index;
+            this.error = errorText ? true : false;
+            this.errorText = errorText? errorText : '';
     }
 
 }
