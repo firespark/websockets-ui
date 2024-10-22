@@ -4,15 +4,15 @@ import { WebSocket } from 'ws';
 export let registeredUsers: User[] = []; 
 
 export class User {
-    id: number;
+    index: number;
     name: string;
-    password: string;
+    password?: string;
     wins: number;
     losses: number;
-    socket: WebSocket;
+    socket?: WebSocket;
 
     constructor(name: string, password: string) {
-      this.id = registeredUsers.length;
+      this.index = registeredUsers.length;
       this.name = name;
       this.password = password;
       this.wins = 0;
