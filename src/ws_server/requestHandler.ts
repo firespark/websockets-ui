@@ -9,20 +9,22 @@ const gameHistory: Game[] = [];
 export class Game {
     idGame: number | string;
     idPlayer: number | string;
-    constructor(idPlayer:number)
+    constructor(idPlayer: number | string)
     {
         this.idGame = gameHistory.length;
         this.idPlayer = idPlayer;
     }
 }
 
-export function create_game(roomId: number, currentUserId: number){
-    const currentGame = new Game(currentUserId);
-    let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
+export function create_game(roomId: number){
+
     rooms[roomId].roomUsers.forEach(player => {
         const socket = activeSockets.get(player.index)
-        if (socket != undefined)
+        if (socket != undefined){
+            const currentGame = new Game(player.index);
+            let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
             socket.send(JSON.stringify(response))
+        }
     });
 }
 
@@ -61,7 +63,7 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
             update_room();
             if (rooms[data.indexRoom].roomUsers.length == 2)
             {
-                create_game(data.indexRoom, userToAdd.index)
+                create_game(data.indexRoom)
             }
            
             break;
