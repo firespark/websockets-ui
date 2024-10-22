@@ -1,8 +1,7 @@
 import { WebSocket } from 'ws';
 import * as types from '../interfaces';
 import { wsServer } from '.';
-import { User, findUserByName, validatePassword, updateWinners, updateSocket, registeredUsers } from './player'
-import { userInfo } from 'os';
+import { User, findUserByName, validatePassword, updateWinners, updateSocket, registeredUsers, cleanUser, currentUser } from './player'
 
 export const rooms: Room[] = [];
 
@@ -11,25 +10,29 @@ export class Room {
   roomUsers: User[];
   constructor(user: User) {
     this.roomID = rooms.length;
-    this.roomUsers = [user];
+    this.roomUsers = [cleanUser(user)];
+  }
+
+  addUser(user:User){
+    this.roomUsers.push(cleanUser(user));
   }
 }
 
 export function update_room() {
-    let exportRooms = rooms;
-    exportRooms.forEach(room => {
-      room.roomUsers.forEach(player => {
-        delete player.password;
-        delete player.socket;
-      });
+    let exportRooms: Room[] = [];
+    rooms.forEach(room => {
+      if (room.roomUsers.length == 1)
+        exportRooms.push(room)
     });
     let response: types.reqOutputInt = new types.Reponse('update_room', JSON.stringify(exportRooms));
+    console.log(response)
     wsServer.broadcast(JSON.stringify(response))
 }
 
 export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
   let data = (req.data) ? JSON.parse(req.data) : '';
   let responseData;
+  console.log(req)
     switch (req.type) {
         case 'reg':
             if (validatePassword(data.name, data.password)) {
@@ -48,12 +51,16 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
             break;
 
         case 'create_room':
-          const plaerToAddId: User | undefined  = registeredUsers.find(user => user.socket === socket);
-          rooms.push(new Room(plaerToAddId as User));
-          //console.log(rooms)
-          update_room()
-          break;
-    
+            
+            rooms.push(new Room(currentUser(socket) as User));
+            update_room();
+            break;
+
+        case 'add_user_to_room':
+          //console.log(data.indexRoom)
+            //rooms[data.indexRoom].addUser(currentUser(socket));
+            update_room();
+
         default:
             break;
     }

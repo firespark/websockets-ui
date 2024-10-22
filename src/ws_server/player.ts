@@ -3,6 +3,8 @@ import { wsServer } from '.';
 import { WebSocket } from 'ws';
 export let registeredUsers: User[] = []; 
 
+const activeSockets: Map<number, WebSocket> = new Map();
+
 export class User {
     index: number;
     name: string;
@@ -28,10 +30,17 @@ export class User {
     }
   }
 
-export function updateSocket(id:number, socket: WebSocket){
-    registeredUsers[id].socket = socket;
-    //console.log(registeredUsers[id])
-}
+  export function updateSocket(userId: number, socket: WebSocket) {
+    // Если уже есть активное соединение, закрываем его.
+    if (activeSockets.has(userId)) {
+      const oldSocket = activeSockets.get(userId);
+      oldSocket?.close();  // Закрываем старое соединение.
+    }
+  
+    // Сохраняем новое соединение.
+    activeSockets.set(userId, socket);
+    console.log(`WebSocket обновлён для пользователя ${userId}`);
+  }
 
 export function findUserByName(name: string): User | undefined {
     return registeredUsers.find(user => user.name === name);
@@ -57,3 +66,19 @@ export function updateWinners() {
     let response: types.reqOutputInt = new types.Reponse('update_winners', JSON.stringify(scoreTable));
     wsServer.broadcast(JSON.stringify(response))
 }
+
+export function cleanUser(user:User){
+    let cleanUser = user;
+    delete cleanUser.password;
+    delete cleanUser.socket;
+    return cleanUser;
+}
+
+export function currentUser(socket: WebSocket): User | undefined {
+
+    const userId = [...activeSockets.entries()].find(([_, s]) => s === socket)?.[0];
+    if (userId !== undefined) {
+      return registeredUsers[userId]; 
+    }
+    return undefined;
+  }

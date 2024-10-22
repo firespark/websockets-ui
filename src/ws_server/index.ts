@@ -6,8 +6,6 @@ const WS_PORT = 3000;
 
 class MyWSServer extends WebSocketServer {
     broadcast(msg) {
-        console.log(msg);
-
          this.clients.forEach(client => {
             client.send(msg);
          });
@@ -34,7 +32,6 @@ wsServer.on('connection', (socket: WebSocket) => {
     
 });
 wsServer.broadcast = function broadcast(msg) {
-    console.log(msg);
     wsServer.clients.forEach(function each(client) {
         client.send(msg);
      });
