@@ -12,6 +12,8 @@ class MyWSServer extends WebSocketServer {
      };
   }
 
+export const activeSockets: Map<number | string, WebSocket> = new Map();
+
 export const wsServer = new MyWSServer({ port: WS_PORT }, () => {
     console.log(`Start new WebSocket on ws://localhost:${WS_PORT}!`);
 });

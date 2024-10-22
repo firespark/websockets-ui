@@ -1,9 +1,7 @@
 import * as types from '../interfaces';
-import { wsServer } from '.';
+import { activeSockets, wsServer } from '.';
 import { WebSocket } from 'ws';
 export let registeredUsers: User[] = []; 
-
-const activeSockets: Map<number, WebSocket> = new Map();
 
 export class User {
     index: number;
@@ -11,6 +9,7 @@ export class User {
     password: string;
     wins: number;
     losses: number;
+
     constructor(name: string, password: string) {
       this.index = registeredUsers.length;
       this.name = name;
@@ -29,13 +28,11 @@ export class User {
   }
 
   export function updateSocket(userId: number, socket: WebSocket) {
-    // Если уже есть активное соединение, закрываем его.
     if (activeSockets.has(userId)) {
       const oldSocket = activeSockets.get(userId);
-      oldSocket?.close();  // Закрываем старое соединение.
+      oldSocket?.close(); 
     }
   
-    // Сохраняем новое соединение.
     activeSockets.set(userId, socket);
     console.log(`WebSocket обновлён для пользователя ${userId}`);
   }

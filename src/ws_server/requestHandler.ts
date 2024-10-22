@@ -1,40 +1,29 @@
 import { WebSocket } from 'ws';
 import * as types from '../interfaces';
-import { wsServer } from '.';
-import { User, findUserByName, validatePassword, updateWinners, updateSocket, registeredUsers, cleanUser, currentUser } from './player'
+import { update_room, rooms, Room } from './room';
+import { User, findUserByName, validatePassword, updateWinners, updateSocket, currentUser } from './player'
 
-export const rooms: Room[] = [];
+import { activeSockets } from '.';
+const gameHistory: Game[] = [];
 
-export class Room {
-  roomId: number | string;
-  roomUsers: {index:number|string, name: string}[];
-  constructor(user: User) {
-    this.roomId = rooms.length;
-    this.roomUsers = [cleanUser(user)];
-  }
-
-  addUser(user:User){
-    this.roomUsers.push(cleanUser(user));
-  }
-
-  isUserInRoom(user:User): boolean{
-    for (const roomie of this.roomUsers) {
-      if (roomie.index === user.index) {
-        return true;
-      }
+export class Game {
+    idGame: number | string;
+    idPlayer: number | string;
+    constructor(idPlayer:number)
+    {
+        this.idGame = gameHistory.length;
+        this.idPlayer = idPlayer;
     }
-    return false;
-  }
 }
 
-export function update_room() {
-    let exportRooms: Room[] = [];
-    rooms.forEach(room => {
-      if (room.roomUsers.length < 2)
-        exportRooms.push(room)
+export function create_game(roomId: number, currentUserId: number){
+    const currentGame = new Game(currentUserId);
+    let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
+    rooms[roomId].roomUsers.forEach(player => {
+        const socket = activeSockets.get(player.index)
+        if (socket != undefined)
+            socket.send(JSON.stringify(response))
     });
-    let response: types.reqOutputInt = new types.Reponse('update_room', JSON.stringify(exportRooms));
-    wsServer.broadcast(JSON.stringify(response))
 }
 
 export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
@@ -59,7 +48,6 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
             break;
 
         case 'create_room':
-            
             rooms.push(new Room(currentUser(socket) as User));
             update_room();
             break;
@@ -70,9 +58,16 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
             if (isUserInside == false) {
               rooms[data.indexRoom].addUser(userToAdd);
             }
-            
             update_room();
+            if (rooms[data.indexRoom].roomUsers.length == 2)
+            {
+                create_game(data.indexRoom, userToAdd.index)
+            }
+           
             break;
+
+        
+
         default:
             break;
     }
