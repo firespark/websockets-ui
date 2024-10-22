@@ -8,11 +8,9 @@ const activeSockets: Map<number, WebSocket> = new Map();
 export class User {
     index: number;
     name: string;
-    password?: string;
+    password: string;
     wins: number;
     losses: number;
-    socket?: WebSocket;
-
     constructor(name: string, password: string) {
       this.index = registeredUsers.length;
       this.name = name;
@@ -68,9 +66,7 @@ export function updateWinners() {
 }
 
 export function cleanUser(user:User){
-    let cleanUser = user;
-    delete cleanUser.password;
-    delete cleanUser.socket;
+    let cleanUser = {name: user.name, index:user.index};
     return cleanUser;
 }
 
