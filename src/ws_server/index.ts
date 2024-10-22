@@ -4,7 +4,17 @@ import * as types from '../interfaces';
 
 const WS_PORT = 3000;
 
-export const wsServer = new WebSocketServer({ port: WS_PORT }, () => {
+class MyWSServer extends WebSocketServer {
+    broadcast(msg) {
+        console.log(msg);
+
+         this.clients.forEach(client => {
+            client.send(msg);
+         });
+     };
+  }
+
+export const wsServer = new MyWSServer({ port: WS_PORT }, () => {
     console.log(`Start new WebSocket on ws://localhost:${WS_PORT}!`);
 });
 
@@ -20,4 +30,12 @@ wsServer.on('connection', (socket: WebSocket) => {
     socket.on('close', function () {
         console.log('WebSocket connection closed');
     });
+
+    
 });
+wsServer.broadcast = function broadcast(msg) {
+    console.log(msg);
+    wsServer.clients.forEach(function each(client) {
+        client.send(msg);
+     });
+ };

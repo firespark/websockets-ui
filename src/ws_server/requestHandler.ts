@@ -1,16 +1,29 @@
 import { WebSocket } from 'ws';
 import * as types from '../interfaces';
+import { wsServer } from '.';
 
 let registeredUsers: User[] = []; 
 class User {
     id: number;
     name: string;
     password: string;
+    wins: number;
+    losses: number;
 
     constructor(name: string, password: string) {
       this.id = registeredUsers.length;
       this.name = name;
       this.password = password;
+      this.wins = 0;
+      this.losses = 0;
+    }
+
+    addWin() {
+        this.wins++;
+    }
+
+    addLoss() {
+        this.losses++;
     }
   }
 
@@ -29,6 +42,16 @@ class User {
     return isValid;
   }
 
+function updateWinners() {
+    let scoreTable: unknown[] = [];
+    registeredUsers.forEach(user => {
+        let scoreEntry = {'name': user.name, 'wins': user.wins};
+        scoreTable.push(scoreEntry)       
+    });
+    let response: types.reqOutputInt = new types.Reponse('update_winners', JSON.stringify(scoreTable));
+    wsServer.broadcast(JSON.stringify(response))
+}
+
 export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
 
     switch (req.type) {
@@ -43,8 +66,9 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
                 responseData = new types.RegOutputData(data.name, 0, "Wrong Password");
             }
             let response: types.reqOutputInt = new types.Reponse('reg', JSON.stringify(responseData));
-            console.log(response)
+
             socket.send(JSON.stringify(response))
+            updateWinners()
             break;
     
         default:
