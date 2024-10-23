@@ -5,24 +5,92 @@ import { User, findUserByName, validatePassword, updateWinners, updateSocket, cu
 
 import { activeSockets } from '.';
 const gameHistory: Game[] = [];
+let runningGames = new Map<number | string, RunningGame>();
+
+
+export class RunningGame {
+    gameID: number | string;
+    roomID: number | string;
+    player1: number | string;
+    player2: number | string;
+    turn: number | string;
+    damagedCellsP1: types.coordinate[];
+    damagedCellsP2: types.coordinate[];
+    shipsP1: GameShip[];
+    shipsP2: GameShip[];
+
+    constructor(sessions: Game[]){
+        this.gameID = sessions[0].idGame;
+        this.roomID = sessions[0].roomID;
+        this.player1 = sessions[0].idPlayer;
+        this.player2 = sessions[1].idPlayer;
+        this.turn = (Math.random() < 0.5) ? sessions[0].idPlayer : sessions[1].idPlayer;
+        this.damagedCellsP1 = [];
+        this.damagedCellsP2 = [];
+        this.shipsP1 = [];
+        this.shipsP2 = [];
+
+        sessions[0].ships.forEach( (ship) => {
+            this.shipsP1.push(new GameShip(ship))
+        });
+
+        sessions[1].ships.forEach( (ship) => {
+            this.shipsP2.push(new GameShip(ship))
+        });
+        
+    }
+}
+
+export class GameShip {
+    cells: types.coordinate[];
+    state: number;
+
+    constructor(ship: Ship){
+        this.cells = [];
+        this.state = 0;
+        for (let i = 1; i <= ship.length; i++){
+            this.cells.push(ship.position);
+            if (ship.direction) {
+                ship.position.y++;
+            }
+            else {
+                ship.position.x++;
+            }
+        }
+    }
+}
 
 export class Game {
     idGame: number | string;
     idPlayer: number | string;
     ships: Ship[];
-    constructor(gameIndex: number | string, idPlayer: number | string)
+    roomID: number | string;
+    constructor(gameIndex: number | string, idPlayer: number | string, roomID: number | string)
     {
         this.idGame = gameIndex;
         this.idPlayer = idPlayer;
         this.ships = [];
+        this.roomID = roomID;
     }
 }
 
 export type Ship = {
-    position: {x:number, y:number};
-    direction: boolean;
+    position: types.coordinate;
+    direction: boolean; //horizontal - 0, vertical - 1
     type: string;
     length: number;
+}
+
+export function startGame(sessions: Game[]) {
+    runningGames.set(sessions[0].idGame, new RunningGame(sessions));
+    sessions.forEach((session) => {
+        const socketPlayer = activeSockets.get(session.idPlayer);
+        if (socketPlayer != undefined){
+            const currentGame = {ships: session.ships, currentPlayerIndex: session.idPlayer};
+            let response: types.reqOutputInt = new types.Reponse('start_game', JSON.stringify(currentGame));
+            socketPlayer.send(JSON.stringify(response))
+        }
+    })
 }
 
 export function create_game(roomId: number){
@@ -30,12 +98,25 @@ export function create_game(roomId: number){
     rooms[roomId].roomUsers.forEach(player => {
         const socket = activeSockets.get(player.index)
         if (socket != undefined){
-            const currentGame = new Game(gameIndex, player.index);
+            const currentGame = new Game(gameIndex, player.index, roomId);
             gameHistory.push(currentGame);
             let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
             socket.send(JSON.stringify(response))
         }
     });
+}
+
+export function updateTurn(gameID: number | string){
+    const currentGame = runningGames.get(gameID);
+    if (currentGame){
+    rooms[currentGame.roomID].roomUsers.forEach(player => {
+        const socket = activeSockets.get(player.index)
+        if (socket != undefined){
+            const currentTurn = {currentPlayer: currentGame.turn}
+            let response: types.reqOutputInt = new types.Reponse('turn', JSON.stringify(currentTurn));
+            socket.send(JSON.stringify(response))
+        }
+    });}
 }
 
 export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
@@ -86,20 +167,17 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
                 if (game.idPlayer == data.indexPlayer) {
                     game.ships = data.ships;
                 }
-                console.log(game.ships)
                 if (game.ships.length > 0)
                     playerReadyCount++;
             });
-            if (playerReadyCount == 2)
-                sessions.forEach((session) => {
-                    const socketPlayer = activeSockets.get(session.idPlayer);
-                    if (socketPlayer != undefined){
-                    const currentGame = {ships: session.ships, currentPlayerIndex: session.idPlayer};
-                    let response: types.reqOutputInt = new types.Reponse('start_game', JSON.stringify(currentGame));
-                    socketPlayer.send(JSON.stringify(response))}
-                })
+            if (playerReadyCount == 2){
+                startGame(sessions);
+                updateTurn(data.gameId);
+            }
             break;
         
+        case '':
+            break;
 
         default:
             break;

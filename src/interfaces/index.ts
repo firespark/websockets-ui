@@ -10,6 +10,11 @@ export interface reqOutputInt {
     id: number,
 }
 
+export interface coordinate {
+    x: number,
+    y: number,
+}
+
 export class Reponse implements reqOutputInt {
     type: string;
     data: string;
