@@ -101,6 +101,16 @@ export class RunningGame {
         const randomIndex = Math.floor(Math.random() * availableCoordinates.length);
         return availableCoordinates[randomIndex];
     }
+
+    checkWinner(): number | string | null{
+        const player1Ships = 10 - this.ships[0].filter(ship => ship.status === 'killed').length;
+        const player2Ships = 10 - this.ships[1].filter(ship => ship.status === 'killed').length;
+        if (player1Ships == 0)
+            return this.players[1];
+        else if (player2Ships == 0)
+            return this.players[0];
+        else return null;
+    }
 }
 
 export type attackReport = {
@@ -264,7 +274,16 @@ export function surroundingCellsWipe(currentGame: RunningGame, attackerID: numbe
     else console.log(`it broke\n ${currentGame.ships[victimIndex]} \n ${deadShipID} \n `)
 }
 
-
+export function finish(winnerId: number | string, currentGame: RunningGame) {
+        rooms[currentGame.roomID].roomUsers.forEach(player => {
+            const socket = activeSockets.get(player.index)
+            if (socket != undefined) {
+                const winner = { winPlayer: winnerId }
+                let response: types.reqOutputInt = new types.Reponse('finish', JSON.stringify(winner));
+                socket.send(JSON.stringify(response))
+            }
+        });
+}
 export function attack(data) {
     const attackedCell: types.coordinate = { x: data.x, y: data.y };
     const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
@@ -273,6 +292,10 @@ export function attack(data) {
         attackFeedback(attackReport, data.gameId);
         if (attackReport.status == 'killed') {
             surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
+            const winnerId = currentGame.checkWinner();
+            if (winnerId != null)
+                finish(winnerId, currentGame)
+
         }
         if (attackReport.status == 'miss') {
             currentGame.turn = 1 - currentGame.turn;
@@ -291,6 +314,9 @@ export function random_attack(data) {
         attackFeedback(attackReport, data.gameId);
         if (attackReport.status == 'killed') {
             surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
+            const winnerId = currentGame.checkWinner();
+            if (winnerId != null)
+                finish(winnerId, currentGame)
         }
         if (attackReport.status == 'miss') {
             currentGame.turn = 1 - currentGame.turn;
