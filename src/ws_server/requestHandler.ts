@@ -2,27 +2,70 @@ import { WebSocket } from 'ws';
 import * as types from '../interfaces';
 import { update_room, rooms, Room } from './room';
 import { User, Player, findUserByName, validatePassword, updateWinners, updateSocket, currentUser } from './player'
-import { attack, create_game, gameHistory, random_attack, Ship, startGame, updateTurn } from './game';
+import { attack, create_game, gameHistory, random_attack, RunningGame, runningGames, Ship, startGame, updateTurn } from './game';
 
 
 let bots = new Map<string, Bot>();
+
+export class attackLog {
+    coordinate: types.coordinate;
+    result: string;
+    constructor(coordinate: types.coordinate, result: string) {
+        this.coordinate = coordinate;
+        this.result = result;
+    }
+}
 
 export class Bot implements Player {
     index: string;
     name: string;
     gameID: number;
+    attackLogs: attackLog[];
+
     constructor() {
         this.index = `bot-${bots.size}`
         this.name = `HAL-9000 mk.${bots.size}`
+        this.attackLogs = []
     }
 
-    async attack(){
-        console.log('trying to attack')
+    async attack() {
         await new Promise(f => setTimeout(f, 1000));
-
-        random_attack({gameId: this.gameID, indexPlayer: this.index});
-        
+        const currentGame: RunningGame | undefined = runningGames.get(this.gameID);
+        if (currentGame) {
+            let coordinate = currentGame.getRandomCoordinate(this.index)
+            const latestShot = this.attackLogs[this.attackLogs.length - 1];
+            if (latestShot) {
+                if (latestShot.result == 'shot') {
+                    let adjacentCell = getRandomValidAdjacentCell(latestShot.coordinate, this.index, currentGame)
+                    if (adjacentCell != null) coordinate = adjacentCell;
+                }
+            }
+            const status = attack({ x: coordinate.x, y: coordinate.y, gameId: this.gameID, indexPlayer: this.index });
+            this.attackLogs.push(new attackLog(coordinate, status as string));
+        }
     }
+}
+function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string, game: RunningGame) {
+
+    const adjacentCells: types.coordinate[] = [
+        { x: coord.x - 1, y: coord.y }, // Left
+        { x: coord.x + 1, y: coord.y }, // Right
+        { x: coord.x, y: coord.y - 1 }, // Up
+        { x: coord.x, y: coord.y + 1 }  // Down
+    ];
+
+    const validCells: types.coordinate[] = []
+
+    adjacentCells.forEach(cell => {
+        if (game.isValidShot(cell, attackerID))
+            validCells.push(cell)
+    });
+    return getRandomElement(validCells);
+}
+
+function getRandomElement<T>(arr: T[]): T | null {
+    if (arr.length === 0) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
 }
 
 export function prepareTheMachine(meatbag: User) {
@@ -37,7 +80,7 @@ export function prepareTheMachine(meatbag: User) {
     }
     const gameID = create_game(beatingsRoom.roomId);
     machine.gameID = gameID;
-    
+
 }
 
 const shipTypes = [
@@ -123,7 +166,7 @@ export function placeAIShips(): Ship[] {
 }
 
 export function passTurnToAI(botID: string) {
-    console.log(`turn passed to bot ${botID}`)
+    console.log(`Turn passed to bot ${botID}`)
     const bot = bots.get(botID);
     bot?.attack()
 }

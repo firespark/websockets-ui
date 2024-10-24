@@ -5,7 +5,7 @@ import { passTurnToAI } from './requestHandler';
 import { rooms } from './room';
 
 export const gameHistory: Game[] = [];
-let runningGames = new Map<number | string, RunningGame>();
+export let runningGames = new Map<number | string, RunningGame>();
 
 
 export class RunningGame {
@@ -219,7 +219,7 @@ export function updateTurn(gameID: number | string) {
                 socket.send(JSON.stringify(response))
             }
         });
-        if (typeof currentGame.players[currentGame.turn] == 'string' )
+        if (typeof currentGame.players[currentGame.turn] == 'string')
             passTurnToAI(currentGame.players[currentGame.turn] as string);
     }
 }
@@ -286,24 +286,28 @@ export function finish(winnerId: number | string, currentGame: RunningGame) {
             registeredUsers[winnerId].addWin();
     updateWinners()
 }
-export function attack(data) {
+export function attack(data):string | undefined {
     const attackedCell: types.coordinate = { x: data.x, y: data.y };
     const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
-    if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer && currentGame.isValidShot(attackedCell, data.indexPlayer)) {
-        const attackReport = currentGame.attack(attackedCell, data.indexPlayer);
-        attackFeedback(attackReport, data.gameId);
-        if (attackReport.status == 'killed') {
-            surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
-            const winnerId = currentGame.checkWinner();
-            if (winnerId != null)
-                finish(winnerId, currentGame)
-
+    if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer)
+        if (currentGame.isValidShot(attackedCell, data.indexPlayer)) {
+            const attackReport = currentGame.attack(attackedCell, data.indexPlayer);
+            attackFeedback(attackReport, data.gameId);
+            if (attackReport.status == 'killed') {
+                surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
+                const winnerId = currentGame.checkWinner();
+                if (winnerId != null)
+                    finish(winnerId, currentGame)
+            }
+            if (attackReport.status == 'miss') {
+                currentGame.turn = 1 - currentGame.turn;
+            }
+            updateTurn(currentGame.gameID)
+            return attackReport.status;
         }
-        if (attackReport.status == 'miss') {
-            currentGame.turn = 1 - currentGame.turn;
+        else {
+            return 'invalid'
         }
-        updateTurn(currentGame.gameID)
-    }
 }
 
 
