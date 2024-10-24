@@ -1,333 +1,125 @@
 import { WebSocket } from 'ws';
 import * as types from '../interfaces';
 import { update_room, rooms, Room } from './room';
-import { User, findUserByName, validatePassword, updateWinners, updateSocket, currentUser } from './player'
+import { User, Player, findUserByName, validatePassword, updateWinners, updateSocket, currentUser } from './player'
+import { attack, create_game, gameHistory, random_attack, Ship, startGame, updateTurn } from './game';
 
-import { activeSockets } from '.';
-const gameHistory: Game[] = [];
-let runningGames = new Map<number | string, RunningGame>();
+const bots: Bot[] = []
 
+export class Bot implements Player {
+    index: string | number;
+    name: string;
 
-export class RunningGame {
-    gameID: number | string;
-    roomID: number | string;
-    players: (number | string)[];
-    turn: number;
-    damagedCells: types.coordinate[][];
-    ships: GameShip[][];
+    constructor() {
+        this.index = `bot-${bots.length}`
+        this.name = `HAL-9000 mk.${bots.length}`
+    }
+}
 
-    constructor(sessions: Game[]) {
-        this.gameID = sessions[0].idGame;
-        this.roomID = sessions[0].roomID;
-        this.players = [];
-        this.turn = Math.round(Math.random());
-        this.damagedCells = [];
-        this.ships = [];
-
-        this.players.push(sessions[0].idPlayer)
-        this.players.push(sessions[1].idPlayer)
-
-        let damagedCellsP1: types.coordinate[] = [];
-        let damagedCellsP2: types.coordinate[] = [];
-
-        this.damagedCells.push(damagedCellsP1);
-        this.damagedCells.push(damagedCellsP2);
-
-        let shipsP1: GameShip[] = [];
-        let shipsP2: GameShip[] = [];
-        sessions[0].ships.forEach((ship) => {
-            shipsP1.push(new GameShip(ship))
-        });
-        this.ships.push(shipsP1);
-
-        sessions[1].ships.forEach((ship) => {
-            shipsP2.push(new GameShip(ship))
-        });
-        this.ships.push(shipsP2);
+function prepareTheMachine(meatbag: User) {
+    const machine = new Bot();
+    bots.push(machine);
+    console.log(`${meatbag.name} is lonely. Release the ${machine.name} (${machine.index})`)
+    const beatingsRoom = new Room(meatbag)
+    rooms.push(beatingsRoom);
+    const isUserInside = beatingsRoom.isUserInRoom(machine);
+    if (isUserInside == false) {
+        beatingsRoom.addUser(machine);
+    }
+    const gameID = create_game(beatingsRoom.roomId);
+    if (gameID) {
+        const AIGame = gameHistory[gameID];
+        AIGame.ships = placeAIShips();
     }
 
-    attack(coordinate: types.coordinate, attackerID: number | string): attackReport {
-        let attackerIndex = this.players.indexOf(attackerID);
-        let victimIndex = attackerIndex ? 0 : 1;
-        this.damagedCells[victimIndex].push(coordinate);
-        let damageReport: attackReport = {
-            position: coordinate,
-            currentPlayer: attackerID,
-            status: 'miss'
-        }
-        for (let i = 0; i < this.ships[victimIndex].length; i++) {
+}
 
-            const victimDamageReport = this.ships[victimIndex][i].damageCheck(coordinate)
-            if (victimDamageReport != 'miss') {
-                console.log(victimDamageReport)
-                damageReport.status = victimDamageReport;
+const shipTypes = [
+    { type: "small", size: 1, count: 4 },
+    { type: "medium", size: 2, count: 3 },
+    { type: "large", size: 3, count: 2 },
+    { type: "huge", size: 4, count: 1 }
+];
+
+function placeAIShips(): Ship[] {
+    const grid: (Ship | null)[][] = Array.from({ length: 10 }, () =>
+        Array(10).fill(null)
+    );
+
+    function canPlaceShip(
+        x: number,
+        y: number,
+        size: number,
+        vertical: boolean
+    ): boolean {
+        for (let i = 0; i < size; i++) {
+            const nx = vertical ? x : x + i;
+            const ny = vertical ? y + i : y;
+
+            if (nx < 0 || nx >= 10 || ny < 0 || ny >= 10) return false;
+
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const checkX = nx + dx;
+                    const checkY = ny + dy;
+                    if (
+                        checkX >= 0 &&
+                        checkX < 10 &&
+                        checkY >= 0 &&
+                        checkY < 10 &&
+                        grid[checkY][checkX] !== null
+                    ) {
+                        return false;
+                    }
+                }
             }
-        }
-
-        console.log(damageReport)
-        return damageReport;
-
-    }
-
-    isValidShot(coordinate: types.coordinate, attackerID: number | string): boolean {
-        let attackerIndex = this.players.indexOf(attackerID);
-        let victimIndex = attackerIndex ? 0 : 1;
-
-        for (let i = 0; i < this.damagedCells[victimIndex].length; i++) {
-            if (this.damagedCells[victimIndex][i].x == coordinate.x && this.damagedCells[victimIndex][i].y == coordinate.y) {
-                return false;
-            }
-
         }
         return true;
     }
 
-    getRandomCoordinate(attackerID: number | string): types.coordinate {
-        let attackerIndex = this.players.indexOf(attackerID);
-        let victimIndex = attackerIndex ? 0 : 1;
+    function placeShip(type: string, size: number): Ship | null {
+        let attempts = 100;
 
-        const allCoordinates: types.coordinate[] = [];
-        for (let x = 0; x < 10; x++) {
-            for (let y = 0; y < 10; y++) {
-                allCoordinates.push({ x, y });
-            }
-        }
-        const availableCoordinates = allCoordinates.filter(
-            coord => !coordinateExists(this.damagedCells[victimIndex], coord)
-        );
-        if (availableCoordinates.length === 0) {
-            return { x: 666, y: 666 }
-        }
-        const randomIndex = Math.floor(Math.random() * availableCoordinates.length);
-        return availableCoordinates[randomIndex];
-    }
+        while (attempts-- > 0) {
+            const x = getRandomInt(0, 10);
+            const y = getRandomInt(0, 10);
+            const vertical = Math.random() < 0.5;
 
-    checkWinner(): number | string | null{
-        const player1Ships = 10 - this.ships[0].filter(ship => ship.status === 'killed').length;
-        const player2Ships = 10 - this.ships[1].filter(ship => ship.status === 'killed').length;
-        if (player1Ships == 0)
-            return this.players[1];
-        else if (player2Ships == 0)
-            return this.players[0];
-        else return null;
-    }
-}
-
-export type attackReport = {
-    position: types.coordinate;
-    currentPlayer: number | string;
-    status: string;
-}
-
-export class GameShip {
-    cells: types.coordinate[];
-    hp: number;
-    maxHP: number;
-    status: string;
-
-    constructor(ship: Ship) {
-        this.cells = [];
-        this.hp = ship.length;
-        this.maxHP = ship.length;
-        this.status = 'healthy';
-        for (let i = 0; i < ship.length; i++) {
-            let coordinate = { x: ship.position.x, y: ship.position.y };
-
-            if (ship.direction) {
-                coordinate.y += i;
-            }
-            else {
-                coordinate.x += i;
-            }
-
-            this.cells.push(coordinate);
-        }
-    }
-
-    damageCheck(cell: types.coordinate): string {
-        let hitReport = 'miss';
-        for (let i = 0; i < this.cells.length; i++) {
-            if (this.cells[i].x == cell.x && this.cells[i].y == cell.y) {
-                console.log(this.cells)
-                this.hp--;
-                if (this.hp <= 0) {
-                    this.status = 'killed';
-                }
-                else
-                    this.status = 'shot';
-                hitReport = this.status;
-                return hitReport;
-            }
-
-        }
-
-        return hitReport;
-    }
-}
-
-export class Game {
-    idGame: number | string;
-    idPlayer: number | string;
-    ships: Ship[];
-    roomID: number | string;
-    constructor(gameIndex: number | string, idPlayer: number | string, roomID: number | string) {
-        this.idGame = gameIndex;
-        this.idPlayer = idPlayer;
-        this.ships = [];
-        this.roomID = roomID;
-    }
-}
-
-export type Ship = {
-    position: types.coordinate;
-    direction: boolean; //horizontal - 0, vertical - 1
-    type: string;
-    length: number;
-}
-
-export function startGame(sessions: Game[]) {
-    runningGames.set(sessions[0].idGame, new RunningGame(sessions));
-    sessions.forEach((session) => {
-        const socketPlayer = activeSockets.get(session.idPlayer);
-        if (socketPlayer != undefined) {
-            const currentGame = { ships: session.ships, currentPlayerIndex: session.idPlayer };
-            let response: types.reqOutputInt = new types.Reponse('start_game', JSON.stringify(currentGame));
-            socketPlayer.send(JSON.stringify(response))
-        }
-    })
-}
-
-export function create_game(roomId: number) {
-    const gameIndex = gameHistory.length;
-    rooms[roomId].roomUsers.forEach(player => {
-        const socket = activeSockets.get(player.index)
-        if (socket != undefined) {
-            const currentGame = new Game(gameIndex, player.index, roomId);
-            gameHistory.push(currentGame);
-            let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
-            socket.send(JSON.stringify(response))
-        }
-    });
-}
-
-export function updateTurn(gameID: number | string) {
-    const currentGame: RunningGame | undefined = runningGames.get(gameID);
-    if (currentGame) {
-        rooms[currentGame.roomID].roomUsers.forEach(player => {
-            const socket = activeSockets.get(player.index)
-            if (socket != undefined) {
-                const currentTurn = { currentPlayer: currentGame.players[currentGame.turn] }
-                let response: types.reqOutputInt = new types.Reponse('turn', JSON.stringify(currentTurn));
-                socket.send(JSON.stringify(response))
-            }
-        });
-    }
-}
-
-export function attackFeedback(attackFeedback: attackReport, gameID: number | string) {
-    const currentGame: RunningGame | undefined = runningGames.get(gameID);
-    if (currentGame) {
-        rooms[currentGame.roomID].roomUsers.forEach(player => {
-            const socket = activeSockets.get(player.index)
-            if (socket != undefined) {
-                let response: types.reqOutputInt = new types.Reponse('attack', JSON.stringify(attackFeedback));
-                socket.send(JSON.stringify(response))
-            }
-        });
-    }
-
-}
-
-export function surroundingCellsWipe(currentGame: RunningGame, attackerID: number | string, killCell: types.coordinate) {
-    let attackerIndex = currentGame.players.indexOf(attackerID);
-    let victimIndex = attackerIndex ? 0 : 1;
-
-    let deadShipID;
-    for (let i = 0; i < currentGame.ships[victimIndex].length; i++) {
-        let ship = currentGame.ships[victimIndex][i];
-        if (ship.status == 'killed') {
-            for (let n = 0; n < ship.cells.length; n++) {
-                if (ship.cells[n].x == killCell.x && ship.cells[n].y == killCell.y) {
-                    deadShipID = i;
-                }
-            }
-        }
-    }
-    if (currentGame.ships[victimIndex][deadShipID]) {
-        for (let i = 0; i < currentGame.ships[victimIndex][deadShipID].cells.length; i++) {
-            const currentShipCell = currentGame.ships[victimIndex][deadShipID].cells[i];
-            for (let wx = -1; wx <= 1; wx++)
-                for (let wy = -1; wy <= 1; wy++) {
-                    const wipedCell: types.coordinate = {
-                        x: currentShipCell.x + wx,
-                        y: currentShipCell.y + wy
-                    }
-                    if (currentGame.isValidShot(wipedCell, attackerID)) {
-                        currentGame.damagedCells[victimIndex].push(wipedCell);
-                        console.log(`wiping coord ${wipedCell}`)
-                        attackFeedback(currentGame.attack(wipedCell, attackerID), currentGame.gameID);
-                    }
+            if (canPlaceShip(x, y, size, vertical)) {
+                for (let i = 0; i < size; i++) {
+                    const nx = vertical ? x : x + i;
+                    const ny = vertical ? y + i : y;
+                    grid[ny][nx] = { position: { x, y }, direction: vertical, type, length };
                 }
 
-        }
-    }
-    else console.log(`it broke\n ${currentGame.ships[victimIndex]} \n ${deadShipID} \n `)
-}
-
-export function finish(winnerId: number | string, currentGame: RunningGame) {
-        rooms[currentGame.roomID].roomUsers.forEach(player => {
-            const socket = activeSockets.get(player.index)
-            if (socket != undefined) {
-                const winner = { winPlayer: winnerId }
-                let response: types.reqOutputInt = new types.Reponse('finish', JSON.stringify(winner));
-                socket.send(JSON.stringify(response))
+                return { position: { x, y }, direction: vertical, type, length };
             }
-        });
-}
-export function attack(data) {
-    const attackedCell: types.coordinate = { x: data.x, y: data.y };
-    const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
-    if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer && currentGame.isValidShot(attackedCell, data.indexPlayer)) {
-        const attackReport = currentGame.attack(attackedCell, data.indexPlayer);
-        attackFeedback(attackReport, data.gameId);
-        if (attackReport.status == 'killed') {
-            surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
-            const winnerId = currentGame.checkWinner();
-            if (winnerId != null)
-                finish(winnerId, currentGame)
-
         }
-        if (attackReport.status == 'miss') {
-            currentGame.turn = 1 - currentGame.turn;
-            updateTurn(currentGame.gameID)
+        return null;
+    }
+
+    const placedShips: Ship[] = [];
+
+    for (const { type, size, count } of shipTypes) {
+        for (let i = 0; i < count; i++) {
+            const ship = placeShip(type, size);
+            if (ship) {
+                placedShips.push(ship);
+            } else {
+                console.error(`Failed to place ship: ${type}`);
+                return []; 
+            }
         }
     }
+
+    return placedShips;
 }
 
 
-export function random_attack(data) {
-    const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
-    if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer) {
-        4
-        const attackedCell: types.coordinate = currentGame.getRandomCoordinate(data.indexPlayer);
-        const attackReport = currentGame.attack(attackedCell, data.indexPlayer);
-        attackFeedback(attackReport, data.gameId);
-        if (attackReport.status == 'killed') {
-            surroundingCellsWipe(currentGame, data.indexPlayer, attackedCell);
-            const winnerId = currentGame.checkWinner();
-            if (winnerId != null)
-                finish(winnerId, currentGame)
-        }
-        if (attackReport.status == 'miss') {
-            currentGame.turn = 1 - currentGame.turn;
-            updateTurn(currentGame.gameID)
-        }
-    }
-}
-function coordinateExists(arr: types.coordinate[], coord: types.coordinate): boolean {
-    return arr.some(c => c.x === coord.x && c.y === coord.y);
-}
 
+function getRandomInt(min: number, max: number): number {
+    return Math.floor(Math.random() * (max - min)) + min;
+}
 
 export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
     let data = (req.data) ? JSON.parse(req.data) : '';
@@ -391,6 +183,11 @@ export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
 
         case 'randomAttack':
             random_attack(data);
+            break;
+
+        case 'single_play':
+            prepareTheMachine(currentUser(socket) as User);
+
             break;
         default:
             break;

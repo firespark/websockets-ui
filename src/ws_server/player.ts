@@ -3,7 +3,12 @@ import { activeSockets, wsServer } from '.';
 import { WebSocket } from 'ws';
 export let registeredUsers: User[] = []; 
 
-export class User {
+export interface Player {
+    index: number | string;
+    name: string;
+}
+
+export class User implements Player {
     index: number;
     name: string;
     password: string;
@@ -53,21 +58,21 @@ export function validatePassword(name: string, password: string): boolean {
   }
 
 export function updateWinners() {
-    let scoreTable: unknown[] = [];
+    let scoreTable: {name:string,wins:number}[] = [];
     registeredUsers.forEach(user => {
         let scoreEntry = {'name': user.name, 'wins': user.wins};
         scoreTable.push(scoreEntry)       
     });
-    let response: types.reqOutputInt = new types.Reponse('update_winners', JSON.stringify(scoreTable));
+    let response: types.reqOutputInt = new types.Reponse('update_winners', JSON.stringify(scoreTable.sort((a, b) => b.wins - a.wins)));
     wsServer.broadcast(JSON.stringify(response))
 }
 
-export function cleanUser(user:User){
+export function cleanUser(user:Player){
     let cleanUser = {name: user.name, index:user.index};
     return cleanUser;
 }
 
-export function currentUser(socket: WebSocket): User | undefined {
+export function currentUser(socket: WebSocket): Player | undefined {
 
     const userId = [...activeSockets.entries()].find(([_, s]) => s === socket)?.[0];
     if (userId !== undefined) {

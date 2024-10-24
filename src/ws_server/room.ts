@@ -1,22 +1,22 @@
 import { wsServer } from '.';
-import { User, cleanUser } from './player'
+import { Player, User, cleanUser } from './player'
 import * as types from '../interfaces';
 
 export const rooms: Room[] = [];
 
 export class Room {
-  roomId: number | string;
+  roomId: number;
   roomUsers: {index:number|string, name: string}[];
-  constructor(user: User) {
+  constructor(user: Player) {
     this.roomId = rooms.length;
     this.roomUsers = [cleanUser(user)];
   }
 
-  addUser(user:User){
+  addUser(user:Player){
     this.roomUsers.push(cleanUser(user));
   }
 
-  isUserInRoom(user:User): boolean{
+  isUserInRoom(user:Player): boolean{
     for (const roomie of this.roomUsers) {
       if (roomie.index === user.index) {
         return true;
