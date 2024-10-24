@@ -1,6 +1,7 @@
 import { activeSockets } from '.';
 import * as types from '../interfaces';
 import { registeredUsers, updateWinners } from './player';
+import { passTurnToAI } from './requestHandler';
 import { rooms } from './room';
 
 export const gameHistory: Game[] = [];
@@ -192,8 +193,9 @@ export function startGame(sessions: Game[]) {
     })
 }
 
-export function create_game(roomId: number): number | undefined {
+export function create_game(roomId: number): number {
     const gameIndex = gameHistory.length;
+
     rooms[roomId].roomUsers.forEach(player => {
         const socket = activeSockets.get(player.index)
         const currentGame = new Game(gameIndex, player.index, roomId);
@@ -202,10 +204,8 @@ export function create_game(roomId: number): number | undefined {
             let response: types.reqOutputInt = new types.Reponse('create_game', JSON.stringify(currentGame));
             socket.send(JSON.stringify(response))
         }
-        if (typeof player.index == 'string')
-            return currentGame.idGame;
     });
-    return undefined;
+    return gameIndex;
 }
 
 export function updateTurn(gameID: number | string) {
@@ -219,6 +219,8 @@ export function updateTurn(gameID: number | string) {
                 socket.send(JSON.stringify(response))
             }
         });
+        if (typeof currentGame.players[currentGame.turn] == 'string' )
+            passTurnToAI(currentGame.players[currentGame.turn] as string);
     }
 }
 
@@ -299,14 +301,15 @@ export function attack(data) {
         }
         if (attackReport.status == 'miss') {
             currentGame.turn = 1 - currentGame.turn;
-            updateTurn(currentGame.gameID)
         }
+        updateTurn(currentGame.gameID)
     }
 }
 
 
 export function random_attack(data) {
     const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
+    console.log(currentGame?.players)
     if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer) {
         4
         const attackedCell: types.coordinate = currentGame.getRandomCoordinate(data.indexPlayer);
@@ -320,8 +323,8 @@ export function random_attack(data) {
         }
         if (attackReport.status == 'miss') {
             currentGame.turn = 1 - currentGame.turn;
-            updateTurn(currentGame.gameID)
         }
+        updateTurn(currentGame.gameID)
     }
 }
 function coordinateExists(arr: types.coordinate[], coord: types.coordinate): boolean {
