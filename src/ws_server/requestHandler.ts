@@ -36,7 +36,7 @@ export class Bot implements Player {
             const latestShot = this.attackLogs[this.attackLogs.length - 1];
             if (latestShot) {
                 if (latestShot.result == 'shot') {
-                    let adjacentCell = getRandomValidAdjacentCell(latestShot.coordinate, this.index, currentGame)
+                    let adjacentCell = getRandomValidAdjacentCell(latestShot.coordinate, this.index, currentGame, this.attackLogs)
                     if (adjacentCell != null) coordinate = adjacentCell;
                 }
             }
@@ -45,7 +45,7 @@ export class Bot implements Player {
         }
     }
 }
-function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string, game: RunningGame) {
+function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string, game: RunningGame, logs: attackLog[]) {
 
     const adjacentCells: types.coordinate[] = [
         { x: coord.x - 1, y: coord.y }, // Left
@@ -60,7 +60,37 @@ function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string,
         if (game.isValidShot(cell, attackerID))
             validCells.push(cell)
     });
-    return getRandomElement(validCells);
+    let probableCell = { x: coord.x, y: coord.y }
+    adjacentCells.forEach((cell, index) => {
+        logs.forEach(log => {
+            if (cell == log.coordinate && log.result == 'shot')
+                switch (index) {
+                    case 0:
+                        probableCell.x + 1;
+                        break;
+
+                    case 1:
+                        probableCell.x - 1;
+                        break;
+
+                    case 2:
+                        probableCell.y + 1;
+                        break;
+
+                    case 3:
+                        probableCell.y - 1;
+                        break;
+
+                    default:
+                        break;
+                }
+        });
+
+    });
+    if (validCells.includes(probableCell))
+        return probableCell;
+    else
+        return getRandomElement(validCells);
 }
 
 function getRandomElement<T>(arr: T[]): T | null {
