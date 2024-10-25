@@ -1,6 +1,6 @@
-import { wsServer } from '.';
-import { Player, User, cleanUser } from './player'
-import * as types from '../interfaces';
+import { wsServer } from '..';
+import { Player, cleanUser } from './player'
+import * as types from '../../interfaces';
 
 export const rooms: Room[] = [];
 

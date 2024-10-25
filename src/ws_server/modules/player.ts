@@ -1,5 +1,5 @@
-import * as types from '../interfaces';
-import { activeSockets, wsServer } from '.';
+import * as types from '../../interfaces';
+import { activeSockets, wsServer } from '..';
 import { WebSocket } from 'ws';
 export let registeredUsers: User[] = []; 
 

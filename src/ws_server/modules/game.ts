@@ -1,8 +1,10 @@
-import { activeSockets } from '.';
-import * as types from '../interfaces';
+import { activeSockets } from '..';
+import * as types from '../../interfaces';
 import { registeredUsers, updateWinners } from './player';
-import { passTurnToAI } from './requestHandler';
+import { passTurnToAI } from './bot';
 import { rooms } from './room';
+import { coordinateExists } from './helpers';
+
 
 export const gameHistory: Game[] = [];
 export let runningGames = new Map<number | string, RunningGame>();
@@ -69,7 +71,8 @@ export class RunningGame {
     isValidShot(coordinate: types.coordinate, attackerID: number | string): boolean {
         let attackerIndex = this.players.indexOf(attackerID);
         let victimIndex = attackerIndex ? 0 : 1;
-
+        if (coordinate.x < 0 || coordinate.x > 9 || coordinate.y < 0 || coordinate.y > 9)
+            return false;
         for (let i = 0; i < this.damagedCells[victimIndex].length; i++) {
             if (this.damagedCells[victimIndex][i].x == coordinate.x && this.damagedCells[victimIndex][i].y == coordinate.y) {
                 return false;
@@ -313,7 +316,6 @@ export function attack(data):string | undefined {
 
 export function random_attack(data) {
     const currentGame: RunningGame | undefined = runningGames.get(data.gameId);
-    console.log(currentGame?.players)
     if (currentGame && currentGame.players[currentGame.turn] == data.indexPlayer) {
         4
         const attackedCell: types.coordinate = currentGame.getRandomCoordinate(data.indexPlayer);
@@ -330,7 +332,4 @@ export function random_attack(data) {
         }
         updateTurn(currentGame.gameID)
     }
-}
-function coordinateExists(arr: types.coordinate[], coord: types.coordinate): boolean {
-    return arr.some(c => c.x === coord.x && c.y === coord.y);
 }

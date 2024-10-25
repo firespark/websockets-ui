@@ -1,9 +1,8 @@
-import { WebSocket } from 'ws';
-import * as types from '../interfaces';
-import { update_room, rooms, Room } from './room';
-import { User, Player, findUserByName, validatePassword, updateWinners, updateSocket, currentUser } from './player'
-import { attack, create_game, gameHistory, random_attack, RunningGame, runningGames, Ship, startGame, updateTurn } from './game';
-
+import * as types from '../../interfaces';
+import { RunningGame, runningGames, attack, create_game, Ship } from "./game";
+import { coordinateExists, getRandomElement, getRandomInt } from "./helpers";
+import { Player, User } from "./player";
+import { Room, rooms } from './room';
 
 let bots = new Map<string, Bot>();
 
@@ -36,8 +35,25 @@ export class Bot implements Player {
             const latestShot = this.attackLogs[this.attackLogs.length - 1];
             if (latestShot) {
                 if (latestShot.result == 'shot') {
-                    let adjacentCell = getRandomValidAdjacentCell(latestShot.coordinate, this.index, currentGame, this.attackLogs)
-                    if (adjacentCell != null) coordinate = adjacentCell;
+                    let adjacentCells = getValidAdjacentCell(latestShot.coordinate, this.index, currentGame, this.attackLogs)
+
+                    if (adjacentCells && adjacentCells.length > 0) {
+                        let randomCell = getRandomElement(adjacentCells)
+                        if (randomCell) {
+                            coordinate = randomCell;
+                            //console.log(`Bot found a coordinate near latest shot`);
+                        }
+                    }
+                }
+                else {
+                    let adjacentCells = getCellsAroundWounds(latestShot.coordinate, this.index, currentGame, this.attackLogs)
+                    if (adjacentCells && adjacentCells.length > 0) {
+                        let randomCell = getRandomElement(adjacentCells)
+                        if (randomCell) {
+                            coordinate = randomCell;
+                            //console.log(`Bot found a coordinate near older shot`);
+                        }
+                    }
                 }
             }
             const status = attack({ x: coordinate.x, y: coordinate.y, gameId: this.gameID, indexPlayer: this.index });
@@ -45,8 +61,8 @@ export class Bot implements Player {
         }
     }
 }
-function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string, game: RunningGame, logs: attackLog[]) {
 
+function getAllValidAdjustedCells(coord: types.coordinate, attackerID: string, game: RunningGame): types.coordinate[] {
     const adjacentCells: types.coordinate[] = [
         { x: coord.x - 1, y: coord.y }, // Left
         { x: coord.x + 1, y: coord.y }, // Right
@@ -60,48 +76,80 @@ function getRandomValidAdjacentCell(coord: types.coordinate, attackerID: string,
         if (game.isValidShot(cell, attackerID))
             validCells.push(cell)
     });
-    let probableCell = { x: coord.x, y: coord.y }
-    adjacentCells.forEach((cell, index) => {
-        logs.forEach(log => {
-            if (cell == log.coordinate && log.result == 'shot')
-                switch (index) {
-                    case 0:
-                        probableCell.x + 1;
-                        break;
 
-                    case 1:
-                        probableCell.x - 1;
-                        break;
-
-                    case 2:
-                        probableCell.y + 1;
-                        break;
-
-                    case 3:
-                        probableCell.y - 1;
-                        break;
-
-                    default:
-                        break;
-                }
-        });
-
-    });
-    if (validCells.includes(probableCell))
-        return probableCell;
-    else
-        return getRandomElement(validCells);
+    return validCells;
 }
 
-function getRandomElement<T>(arr: T[]): T | null {
-    if (arr.length === 0) return null;
-    return arr[Math.floor(Math.random() * arr.length)];
+function getValidAdjacentCell(coord: types.coordinate, attackerID: string, game: RunningGame, logs: attackLog[]) {
+    const adjacentCells: types.coordinate[] = [
+        { x: coord.x - 1, y: coord.y }, // Left
+        { x: coord.x + 1, y: coord.y }, // Right
+        { x: coord.x, y: coord.y - 1 }, // Up
+        { x: coord.x, y: coord.y + 1 }  // Down
+    ];
+
+    const validCells: types.coordinate[] = getAllValidAdjustedCells(coord, attackerID, game);
+
+    let foundCell = false;
+    let probableCell = { x: coord.x, y: coord.y };
+
+    for (let index = 0; index < adjacentCells.length; index++) {
+        const cell = adjacentCells[index];
+        if (!foundCell) {
+            for (let n = 0; n < logs.length; n++) {
+                const log = logs[n];
+                if (cell.x == log.coordinate.x && cell.y == log.coordinate.y && log.result == 'shot') {
+                    switch (index) {
+                        case 0:
+                            probableCell.x + 1;
+                            break;
+
+                        case 1:
+                            probableCell.x - 1;
+                            break;
+
+                        case 2:
+                            probableCell.y + 1;
+                            break;
+
+                        case 3:
+                            probableCell.y - 1;
+                            break;
+
+                        default:
+                            break;
+                    }
+                    foundCell = true;
+                    break;
+                }
+            }
+        }
+
+    }
+
+    if (coordinateExists(validCells, probableCell))
+        return [probableCell];
+    else if (validCells.length > 0)
+        return validCells;
+}
+
+export function getCellsAroundWounds(coord: types.coordinate, attackerID: string, game: RunningGame, logs: attackLog[]) {
+    const resultCells: types.coordinate[] = []
+    for (let n = 0; n < logs.length; n++) {
+        const log = logs[n];
+        if (log.result == 'shot') {
+            let cellsAroundWound = getValidAdjacentCell(log.coordinate, attackerID, game, logs);
+            if (cellsAroundWound)
+                resultCells.push(...cellsAroundWound)
+        }
+    }
+    return resultCells;
 }
 
 export function prepareTheMachine(meatbag: User) {
     const machine = new Bot();
     bots.set(machine.index, machine);
-    console.log(`${meatbag.name} is lonely. Release the ${machine.name} (${machine.index})`)
+    //console.log(`${meatbag.name} is lonely. Release the ${machine.name} (${machine.index})`)
     const beatingsRoom = new Room(meatbag)
     rooms.push(beatingsRoom);
     const isUserInside = beatingsRoom.isUserInRoom(machine);
@@ -121,7 +169,7 @@ const shipTypes = [
 ];
 
 export function placeAIShips(): Ship[] {
-    console.log('Creating Ship Grid')
+    //console.log('Creating ship grid for bot')
     const grid: (Ship | null)[][] = Array.from({ length: 10 }, () =>
         Array(10).fill(null)
     );
@@ -196,88 +244,9 @@ export function placeAIShips(): Ship[] {
 }
 
 export function passTurnToAI(botID: string) {
-    console.log(`Turn passed to bot ${botID}`)
+    //console.log(`Turn passed to bot ${botID}`)
     const bot = bots.get(botID);
     bot?.attack()
 }
 
-function getRandomInt(min: number, max: number): number {
-    return Math.floor(Math.random() * (max - min)) + min;
-}
-
-export const requestHandler = (req: types.reqInputInt, socket: WebSocket) => {
-    let data = (req.data) ? JSON.parse(req.data) : '';
-    let responseData;
-    console.log(req)
-    switch (req.type) {
-        case 'reg':
-            if (validatePassword(data.name, data.password)) {
-                let loggedInUser = findUserByName(data.name) as User;
-                updateSocket(loggedInUser.index, socket);
-                responseData = new types.RegOutputData(loggedInUser.name, loggedInUser.index);
-            }
-            else {
-                responseData = new types.RegOutputData(data.name, 0, "Wrong Password");
-            }
-            let response: types.reqOutputInt = new types.Reponse('reg', JSON.stringify(responseData));
-
-            socket.send(JSON.stringify(response))
-            updateWinners()
-            update_room()
-            break;
-
-        case 'create_room':
-            rooms.push(new Room(currentUser(socket) as User));
-            update_room();
-            break;
-
-        case 'add_user_to_room':
-            let userToAdd = currentUser(socket) as User;
-            const isUserInside = rooms[data.indexRoom].isUserInRoom(userToAdd);
-            if (isUserInside == false) {
-                rooms[data.indexRoom].addUser(userToAdd);
-            }
-            update_room();
-            if (rooms[data.indexRoom].roomUsers.length == 2) {
-                create_game(data.indexRoom)
-            }
-            break;
-
-        case 'add_ships':
-            let playerReadyCount = 0;
-            let sessions = gameHistory.filter((game) => {
-                return game.idGame == data.gameId;
-            });
-            sessions.forEach(game => {
-                if (game.idPlayer == data.indexPlayer) {
-                    game.ships = data.ships;
-                }
-                if (typeof game.idPlayer == 'string') {
-                    game.ships = placeAIShips();
-                }
-                if (game.ships.length > 0)
-                    playerReadyCount++;
-            });
-            if (playerReadyCount == 2) {
-                startGame(sessions);
-                updateTurn(data.gameId);
-            }
-            break;
-
-        case 'attack':
-            attack(data);
-            break;
-
-        case 'randomAttack':
-            random_attack(data);
-            break;
-
-        case 'single_play':
-            prepareTheMachine(currentUser(socket) as User);
-
-            break;
-        default:
-            break;
-    }
-}
 

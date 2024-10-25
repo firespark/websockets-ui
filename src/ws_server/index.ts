@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws';
-import { requestHandler } from './requestHandler';
+import { requestHandler } from './modules/requestHandler';
 import * as types from '../interfaces';
 
 const WS_PORT = 3000;
